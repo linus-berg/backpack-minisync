@@ -1,0 +1,129 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+    # a v* tag (e.g. v1.2.0) also publishes a GitHub release
+    tags: ['v*']
+    paths-ignore:
+      - '**/*.md'
+      - 'LICENSE'
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# a newer push to the same pull request makes the older run pointless
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+jobs:
+  # build, test and smoke test each executable on the OS it is for
+  build:
+    name: Build ${{ matrix.rid }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - rid: win-x64
+            os: windows-latest
+            binary: minisync.exe
+          - rid: linux-x64
+            os: ubuntu-latest
+            binary: minisync
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Test
+        run: dotnet test Backpack.MiniSync.sln -c Release
+
+      - name: Publish self-contained single file
+        run: |
+          # a release tag stamps its version into the executable
+          version=()
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            version=("-p:Version=${GITHUB_REF_NAME#v}")
+          fi
+          dotnet publish src/MiniSync -c Release -r ${{ matrix.rid }} -o publish "${version[@]}"
+
+      - name: Smoke test
+        run: |
+          # sync a small real set with the published executable itself
+          exe="$PWD/publish/${{ matrix.binary }}"
+          cd "$(mktemp -d)"
+          "$exe" --version
+          "$exe" init
+          # every dependency group would pull ~85 legacy netstandard1.x packages
+          sed -i 's/"target_frameworks": \[\]/"target_frameworks": ["net8.0"]/' minisync.json
+          grep -q '"net8.0"' minisync.json
+          "$exe" add npm react@19.0.0
+          "$exe" add nuget Newtonsoft.Json@13.0.3
+          "$exe" sync
+          test -f data/npm/registry.npmjs.org/react/react-19.0.0.tgz
+          test -f data/nuget/api.nuget.org/v3-flatcontainer/newtonsoft.json/13.0.3/newtonsoft.json.13.0.3.nupkg
+
+      - name: Package
+        run: |
+          mkdir dist
+          if [[ "${{ matrix.rid }}" == win-* ]]; then
+            cp publish/minisync.exe dist/minisync-${{ matrix.rid }}.exe
+          else
+            # artifacts and release downloads drop the executable bit, a tarball keeps it
+            tar -czf dist/minisync-${{ matrix.rid }}.tar.gz -C publish minisync
+          fi
+
+      - name: Upload executable
+        uses: actions/upload-artifact@v7
+        with:
+          name: minisync-${{ matrix.rid }}
+          path: dist/*
+          if-no-files-found: error
+
+  release:
+    name: Publish release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download executables
+        uses: actions/download-artifact@v8
+        with:
+          pattern: minisync-*
+          path: dist
+          merge-multiple: true
+
+      # lets the files be checked after they are carried across the air gap
+      - name: Checksums
+        working-directory: dist
+        run: sha256sum * > SHA256SUMS
+
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "$GITHUB_REF_NAME" \
+            --generate-notes

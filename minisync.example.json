@@ -1,0 +1,29 @@
+{
+  "output": "data",
+  "concurrency": 8,
+  "delta": true,
+  "npm": {
+    "registry": "https://registry.npmjs.org/",
+    "peer_dependencies": true,
+    "optional_dependencies": true,
+    "os": ["win32", "linux"],
+    "cpu": ["x64"],
+    "allow": [],
+    "deny": [],
+    "packages": {
+      "react": "19.0",
+      "react-dom": "19.0",
+      "typescript": ["5.6.3", "5.7.2"]
+    }
+  },
+  "nuget": {
+    "source": "https://api.nuget.org/v3/index.json",
+    "target_frameworks": ["net8.0", "net48"],
+    "allow": [],
+    "deny": [],
+    "packages": {
+      "Newtonsoft.Json": "13.0.3",
+      "Serilog.AspNetCore": "8.0.3"
+    }
+  }
+}

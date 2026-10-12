@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <TargetFramework>net8.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <AssemblyName>minisync</AssemblyName>
+        <RootNamespace>MiniSync</RootNamespace>
+        <Version>1.0.0</Version>
+        <InvariantGlobalization>true</InvariantGlobalization>
+        <!-- dotnet publish -c Release -r win-x64 produces one self-contained exe. -->
+        <PublishSingleFile>true</PublishSingleFile>
+        <SelfContained Condition="'$(RuntimeIdentifier)' != ''">true</SelfContained>
+        <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+        <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="NuGet.Packaging" Version="7.9.0"/>
+        <PackageReference Include="Semver" Version="3.0.0"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <InternalsVisibleTo Include="MiniSync.Tests"/>
+    </ItemGroup>
+</Project>
